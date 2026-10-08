@@ -1,0 +1,4 @@
+{
+  "description": "Split diff view: Edit and Write diffs drawn in two columns",
+  "modules": ["./register.ts"]
+}

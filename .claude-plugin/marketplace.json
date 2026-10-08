@@ -1,0 +1,15 @@
+{
+  "name": "neteye-platform",
+  "description": "Claude Code plugins and mods by NetEye Platform developers",
+  "owner": {
+    "name": "NetEye Platform",
+    "url": "https://github.com/neteye-platform"
+  },
+  "plugins": [
+    {
+      "name": "cc-split-diff-view",
+      "source": "./",
+      "description": "Edit and Write diffs in two side-by-side columns instead of +/- lines"
+    }
+  ]
+}

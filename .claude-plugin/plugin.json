@@ -1,0 +1,7 @@
+{
+  "name": "cc-split-diff-view",
+  "version": "0.1.0",
+  "description": "Draws Edit and Write diffs in two side-by-side columns: removed lines on the left, added lines on the right, in Claude Code's own diff colors",
+  "author": { "name": "oskarnrk", "url": "https://github.com/oskarnrk" },
+  "repository": "https://github.com/neteye-platform/cc-split-diff-view"
+}
