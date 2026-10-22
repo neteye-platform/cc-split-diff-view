@@ -1,8 +1,13 @@
 # Split diff view for Claude Code
 
+[![reach](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/neteye-platform--cc-split-diff-view--cc-split-diff-view-reach.svg)](https://mods.aidojo.si/mods/neteye-platform--cc-split-diff-view--cc-split-diff-view/)
+[![validates](https://raw.githubusercontent.com/karanb192/awesome-claude-code-mods/main/badges/neteye-platform--cc-split-diff-view--cc-split-diff-view-validates.svg)](https://mods.aidojo.si/mods/neteye-platform--cc-split-diff-view--cc-split-diff-view/)
+
 A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that
 draws the diff of every `Edit` and `Write` in **two side-by-side columns**
 instead of one stacked `-`/`+` list:
+
+![Split diff of an Edit: removed lines on the left, added lines on the right, each with its own line numbers](docs/split-diff-view.png)
 
 - removed lines on the **left**, added lines on the **right**
 - each side keeps its real line numbers
@@ -92,3 +97,5 @@ The mod hot-reloads when you save a file in that directory.
 
 Developed by Oscar Zambotti ([@oskarnrk](https://github.com/oskarnrk)) in the
 NetEye Platform development team, with Claude Code.
+
+Listed on [Awesome Claude Code Mods](https://mods.aidojo.si/mods/neteye-platform--cc-split-diff-view--cc-split-diff-view/).
