@@ -35,6 +35,8 @@ directory against `HEAD`, untracked files included:
 - `r` reloads the changes
 - `Esc` closes the pane
 
+![The /diffsplit pane: the list of the changed files with their counts, then each file open under its name, between two lines, with its diff in two columns](docs/diffsplit-pane.png)
+
 Binary files are listed with `binary` and no diff. The pane reads the diff of
 the first 100 files and draws a limited number of rows (at most 500 per file
 and about 1200 in all); when a diff is cut it says `… N more rows`, and
