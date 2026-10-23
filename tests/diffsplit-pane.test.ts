@@ -40,7 +40,7 @@ const added = (lines: number) =>
 /** The engine below the mod: an in-memory state, and git answering for `files` files of `lines` lines. */
 function engine(on: On, files: number, lines: number) {
   // What the tests change and read: the tree git answers for, and how often the pane's list was stored.
-  const tree = { files, lines, loads: 0 }
+  const tree = { files, lines, loads: 0, untracked: [] as string[], calls: [] as string[], diff: null as string | null }
   const store = new Map<string, { value: unknown; version: number }>()
   on('state.get', (_, e) => ({ value: store.get(e.key) ?? { value: undefined, version: 0 } }))
   on('state.set', (_, e) => {
@@ -56,14 +56,16 @@ function engine(on: On, files: number, lines: number) {
       value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
     })
     const git = e.argv.join(' ')
+    tree.calls.push(git)
     const names = Array.from({ length: tree.files }, (_, i) => `f${i}.txt`)
     if (git.includes('--name-status')) return out(names.map(name => `A\0${name}\0`).join(''))
     if (git.includes('--numstat')) return out(names.map(name => `${tree.lines}\t0\t${name}\0`).join(''))
     if (git.includes('rev-parse')) return out('true\n')
-    if (git.includes('ls-files')) return out('')
+    if (git.includes('ls-files')) return out(tree.untracked.map(path => path + '\0').join(''))
+    if (git.includes('hash-object')) return out('')
     // The diff of the whole tree, as the pane reads it to tell if anything changed.
     if (!git.includes(' -- ')) return out(names.map(() => added(tree.lines)).join(''))
-    return out(added(tree.lines))
+    return out(tree.diff ?? added(tree.lines))
   })
   return tree
 }
@@ -148,6 +150,69 @@ test('a tool result and the pane draw the same diff', async ($, on) => {
   expect(await pane.find({ type: 'Text', text: /⎿/ })).toBeUndefined()
   await result.unmount()
   await pane.unmount()
+})
+
+// Git names the tracked files from the root of the repository and the untracked ones from the
+// working directory; `--relative` makes the tracked ones follow the working directory too, or
+// a path from the list is no pathspec for the diff of the file when the session sits in a subfolder.
+test('the diff of the tracked files is named from the working directory', async ($, on) => {
+  const tree = engine(on, 1, 2)
+  tree.untracked = ['new.txt']
+  on('clock.every', () => ({ value: undefined }))
+  await $.command.run(RUN)
+
+  const diffs = tree.calls.filter(call => call.includes(' diff '))
+  const untracked = diffs.filter(call => call.includes('--no-index'))
+  const tracked = diffs.filter(call => !call.includes('--no-index'))
+
+  // The list (name-status, numstat), the diff of the file and the fingerprint.
+  expect(tracked.length).toBeGreaterThanOrEqual(4)
+  expect(tracked.filter(call => !call.includes('--relative'))).toEqual([])
+  // The `--no-index` call keeps the arguments it had.
+  expect(untracked).toHaveLength(1)
+  expect(untracked[0]).not.toContain('--relative')
+})
+
+/** A diff with no split form: the old side lacks the final newline and the new side has it. */
+const noSplit = (lines: number, text: (side: '-' | '+', i: number) => string) =>
+  [
+    `@@ -1,${lines} +1,${lines} @@`,
+    ...Array.from({ length: lines }, (_, i) => text('-', i)),
+    '\\ No newline at end of file',
+    ...Array.from({ length: lines }, (_, i) => text('+', i)),
+    '',
+  ].join('\n')
+
+// What has no split form is drawn from git's own lines, but out of the same budgets as the rest.
+test('a diff with no split form keeps to the rows of the file and of the pane', async ($, on) => {
+  const tree = engine(on, 3, 300)
+  tree.diff = noSplit(300, (side, i) => `${side}line number ${i}`)
+  on('clock.every', () => ({ value: undefined }))
+  await $.command.run(RUN)
+
+  const ui = await $.ui.mount(PANE)
+  const sources = (await ui.findAll({ type: 'Code' })).map(code => code.text.split('\n').length)
+  // 3 files of 602 lines: no file past 500 rows, and not more than 1200 in all.
+  expect(sources).toHaveLength(3)
+  expect(Math.max(...sources)).toBeLessThanOrEqual(500)
+  expect(sources.reduce((sum, rows) => sum + rows, 0)).toBeLessThanOrEqual(1200)
+  // And the part left out is said, per file.
+  expect((await ui.findAll({ type: 'Text', text: /more rows/ })).length).toBeGreaterThan(0)
+  await ui.unmount()
+})
+
+test('a diff with no split form is cut at the engine limit and loses control characters', async ($, on) => {
+  const tree = engine(on, 1, 2)
+  tree.diff = noSplit(1, (side, i) => (i === 0 && side === '-' ? '-a\rb\tc' + 'x'.repeat(20_000) : '+short'))
+  on('clock.every', () => ({ value: undefined }))
+  await $.command.run(RUN)
+
+  const ui = await $.ui.mount(PANE)
+  const code = (await ui.find({ type: 'Code' }))?.text ?? ''
+  expect(code).not.toContain('\r')
+  expect(code).not.toContain('\t')
+  expect(Math.max(...code.split('\n').map(line => line.length))).toBeLessThanOrEqual(10_000)
+  await ui.unmount()
 })
 
 /** The pane is open: what `$.ui.panes` answers. */

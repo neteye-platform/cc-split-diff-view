@@ -1,11 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { ElementTable, Hook, On } from 'claude-code'
 
-import { TEXT_BUDGET, drawDiff, drawUnifiedHunks, rowsWithin } from './draw.js'
-import type { Kit as DrawKit } from './draw.js'
+import { TEXT_BUDGET, drawFit, fitHunks } from './draw.js'
+import type { Fit, Kit as DrawKit } from './draw.js'
 import { parseChanges, parseHunks, parseUntracked } from './git-diff.js'
-import { splitRows } from './split-rows.js'
-import type { SplitDiff } from './split-rows.js'
 import type { Change, FileDiff, Snapshot } from '../types'
 
 const COMMAND = 'diffsplit'
@@ -37,6 +35,15 @@ const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 const GIT = ['git', '--no-pager', '-c', 'core.quotepath=off']
 const DIFF = ['diff', '--no-color', '--no-ext-diff', '--no-renames']
+
+/**
+ * The same for the tracked files. Git names them from the root of the
+ * repository, but the untracked ones (`ls-files --others`) from the working
+ * directory; `--relative` names both from the working directory, so a path
+ * from one list works as a pathspec of the diff in the other. It also keeps the
+ * list to the working directory, as `ls-files` does.
+ */
+const TRACKED = [...DIFF, '--relative']
 
 // Change the tag when the fields of a value change: it declines what an
 // earlier version stored, which outlives a reload.
@@ -126,7 +133,7 @@ async function baseOf($: Engine) {
  */
 async function fingerprint($: Engine): Promise<string> {
   const git = (args: string[], stdin?: string) => $.process.run([...GIT, ...args], stdin === undefined ? undefined : { stdin })
-  const [diff, others] = await Promise.all([git([...DIFF, await baseOf($)]), git(['ls-files', '--others', '--exclude-standard', '-z'])])
+  const [diff, others] = await Promise.all([git([...TRACKED, await baseOf($)]), git(['ls-files', '--others', '--exclude-standard', '-z'])])
   const paths = others.stdout.split('\0').filter(path => path !== '')
   const hashes = paths.length === 0 ? '' : (await git(['hash-object', '--stdin-paths'], paths.join('\n'))).stdout
   return [diff.stdout, others.stdout, hashes].join('\u0001')
@@ -171,8 +178,8 @@ async function ask($: Engine): Promise<Snapshot> {
 
   const base = await baseOf($)
   const [nameStatus, numstat, others] = await Promise.all([
-    git([...DIFF, '--name-status', '-z', base]),
-    git([...DIFF, '--numstat', '-z', base]),
+    git([...TRACKED, '--name-status', '-z', base]),
+    git([...TRACKED, '--numstat', '-z', base]),
     git(['ls-files', '--others', '--exclude-standard', '-z']),
   ])
   if (nameStatus.exitCode !== 0) return { kind: 'error', message: nameStatus.stderr.trim() || 'git diff failed.' }
@@ -191,7 +198,7 @@ async function diffOf($: Engine, change: Change, base: string): Promise<FileDiff
   const shown =
     change.status === 'untracked'
       ? await git([...DIFF, '--no-index', '--', '/dev/null', change.path])
-      : await git([...DIFF, base, '--', change.path])
+      : await git([...TRACKED, base, '--', change.path])
   const hunks = parseHunks(shown.stdout)
   if (change.status !== 'untracked') return { ...change, hunks }
 
@@ -213,11 +220,11 @@ function drawFiles($: Engine, kit: Kit, files: FileDiff[], hidden: number, close
   let charsLeft = Math.max(0, TEXT_BUDGET - frame)
   const drawn = files.map(file => {
     const isFolded = closed.includes(file.path)
-    const diff = isFolded || file.isBinary ? null : splitRows(file.hunks)
-    const { count, chars } = diff === null ? { count: 0, chars: 0 } : rowsWithin(diff, Math.min(MAX_ROWS, rowsLeft), charsLeft)
-    rowsLeft -= count
-    charsLeft -= chars
-    return drawFile($, kit, file, isFolded, diff, count, columns)
+    const isShown = !isFolded && !file.isBinary && file.hunks.length > 0
+    const fit = isShown ? fitHunks(file.hunks, Math.min(MAX_ROWS, rowsLeft), charsLeft) : null
+    rowsLeft -= fit?.count ?? 0
+    charsLeft -= fit?.chars ?? 0
+    return drawFile($, kit, file, isFolded, fit, columns)
   })
 
   return Box({
@@ -255,15 +262,7 @@ function drawFiles($: Engine, kit: Kit, files: FileDiff[], hidden: number, close
   })
 }
 
-function drawFile(
-  $: Engine,
-  kit: Kit,
-  file: FileDiff,
-  isFolded: boolean,
-  diff: SplitDiff | null,
-  limit: number,
-  columns: number,
-) {
+function drawFile($: Engine, kit: Kit, file: FileDiff, isFolded: boolean, fit: Fit | null, columns: number) {
   const { Box, Text } = kit
   const toggle = () =>
     void update($, folded, list => (list.includes(file.path) ? list.filter(path => path !== file.path) : [...list, file.path]))
@@ -277,7 +276,7 @@ function drawFile(
       rule(),
       fileRow(kit, file, { key: 'file:' + file.path, label: (isFolded ? '▸ ' : '▾ ') + file.path, onPress: toggle }),
       rule(),
-      isFolded ? null : body(kit, file, diff, limit),
+      isFolded ? null : body(kit, file, fit),
     ],
   })
 }
@@ -304,16 +303,13 @@ function counts(Text: Kit['Text'], file: FileDiff) {
   ]
 }
 
-function body(kit: Kit, file: FileDiff, diff: SplitDiff | null, limit: number) {
+function body(kit: Kit, file: FileDiff, fit: Fit | null) {
   const { Text } = kit
   if (file.isBinary) return Text({ dimColor: true, children: ['Binary file.'] })
-  if (file.hunks.length === 0) {
+  if (fit === null) {
     const empty = file.status === 'deleted' ? 'Empty file deleted.' : 'No changes to show.'
     return Text({ dimColor: true, children: [empty] })
   }
 
-  // A "\ No newline" mismatch has no split form: show git's own diff.
-  if (diff === null) return drawUnifiedHunks(kit, file.hunks, file.path)
-
-  return drawDiff(kit, diff, { path: file.path, maxRows: limit, layout: 'pane' })
+  return drawFit(kit, fit, file.path)
 }

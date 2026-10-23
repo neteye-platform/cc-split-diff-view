@@ -1,6 +1,7 @@
 import type { ElementTable } from 'claude-code'
 
 import type { Hunk } from '../types'
+import { drawable, splitRows } from './split-rows.js'
 import type { Cell, SplitDiff, SplitRow } from './split-rows.js'
 
 export type Kit = Pick<ElementTable<'terminal'>, 'Box' | 'Text' | 'Code'>
@@ -98,15 +99,53 @@ export function drawDiff(kit: Kit, diff: SplitDiff, { path, maxRows, layout }: D
 }
 
 /**
- * A diff as git prints it, for what has no split form (a file with a final
- * newline on one side only): the engine's own diff drawing, one hunk after
- * the other.
+ * What fits of a file's hunks in the rows and characters left: the split rows,
+ * or, for what has no split form (a final newline on one side only), the lines
+ * of git's own diff. Either way `count` rows and `chars` characters are spent.
  */
-export function drawUnifiedHunks({ Code }: Kit, hunks: readonly Hunk[], path: string | undefined) {
-  const source = hunks
-    .map(hunk => `@@ -${hunk.oldStart} +${hunk.newStart} @@\n` + hunk.lines.join('\n'))
-    .join('\n')
-  return Code({ source, format: 'diff', wrap: 'wrap', ...(path === undefined ? {} : { path }) })
+export type Fit =
+  | { kind: 'split'; diff: SplitDiff; count: number; chars: number }
+  | { kind: 'unified'; lines: string[]; total: number; count: number; chars: number }
+
+/**
+ * The one place that shares the row and character budgets out, for the split
+ * rows and the unified lines alike. Lines are made drawable as the split rows
+ * are: tabs laid out, control characters dropped, cut at the engine's limit.
+ */
+export function fitHunks(hunks: readonly Hunk[], maxRows: number, maxChars: number): Fit {
+  const diff = splitRows(hunks)
+  if (diff !== null) return { kind: 'split', diff, ...rowsWithin(diff, maxRows, maxChars) }
+
+  const all = hunks.flatMap(hunk => [`@@ -${hunk.oldStart} +${hunk.newStart} @@`, ...hunk.lines].map(drawable))
+  const lines: string[] = []
+  let chars = 0
+  for (const line of all.slice(0, maxRows)) {
+    // The line break is a character of the source too.
+    if (chars + line.length + 1 > maxChars) break
+    chars += line.length + 1
+    lines.push(line)
+  }
+  return { kind: 'unified', lines, total: all.length, count: lines.length, chars }
+}
+
+/**
+ * Draws a fit: the split diff in the pane's layout, or git's own diff, in the
+ * engine's drawing, with "… N more rows" after what was cut.
+ */
+export function drawFit(kit: Kit, fit: Fit, path: string | undefined) {
+  if (fit.kind === 'split') return drawDiff(kit, fit.diff, { path, maxRows: fit.count, layout: 'pane' })
+
+  const { Box, Text, Code } = kit
+  const hidden = fit.total - fit.count
+  return Box({
+    flexDirection: 'column',
+    children: [
+      fit.count === 0
+        ? null
+        : Code({ source: fit.lines.join('\n'), format: 'diff', wrap: 'wrap', ...(path === undefined ? {} : { path }) }),
+      hidden > 0 ? Text({ dimColor: true, children: ['… ' + hidden + ' more rows'] }) : null,
+    ],
+  })
 }
 
 /**
