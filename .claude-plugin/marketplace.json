@@ -9,7 +9,7 @@
     {
       "name": "cc-split-diff-view",
       "source": "./",
-      "description": "Edit and Write diffs in two side-by-side columns instead of +/- lines"
+      "description": "Edit and Write diffs in two side-by-side columns instead of +/- lines, and /diffsplit to review all uncommitted changes the same way"
     }
   ]
 }
