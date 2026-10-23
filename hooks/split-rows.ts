@@ -32,7 +32,7 @@ const MAX_TEXT = 10_000
  * invisible character dropped (a stray '\r' from a CRLF file would otherwise
  * get the whole tree refused), and cut to the engine's cap.
  */
-const drawable = (text: string) =>
+export const drawable = (text: string) =>
   text
     .replace(/\t/g, TAB)
     .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '')

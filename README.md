@@ -16,11 +16,31 @@ instead of one stacked `-`/`+` list:
 - colors are Claude Code's own diff colors (`diffRemoved` / `diffAdded` theme
   keys), so they follow your `/theme`
 - syntax highlighting comes from Claude Code's own highlighter (the `Code`
-  element, the one the built-in `/diff` pane uses), with the language taken
-  from the file's extension
+  element), with the language taken from the file's extension
 
 Errors, edits held for review, brand-new files and anything without a diff
 keep Claude Code's normal drawing.
+
+## `/diffsplit`
+
+Reviews all the uncommitted changes in one pane, with every diff in two
+columns. It opens a pane titled **Split Diff** with the changes of the working
+directory against `HEAD`, untracked files included:
+
+- a list of the changed files comes first, each row ending with its `+n -n`
+  counts; click a file, or press `Enter` on it, to jump to its diff
+- under the list, every file is open: its name sits between two lines, with
+  the counts at the end of the row, and its diff follows in two columns
+- click a file's name, or press `Enter` on it, to fold or unfold that file
+- `r` reloads the changes
+- `Esc` closes the pane
+
+![The /diffsplit pane: the list of the changed files with their counts, then each file open under its name, between two lines, with its diff in two columns](docs/diffsplit-pane.png)
+
+Binary files are listed with `binary` and no diff. The pane reads the diff of
+the first 100 files and draws a limited number of rows (at most 500 per file
+and about 1200 in all); when a diff is cut it says `… N more rows`, and
+folding other files makes room for it.
 
 ## Requirements
 
