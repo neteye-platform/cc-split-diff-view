@@ -98,9 +98,10 @@ const count = (hunks: readonly Hunk[], mark: '+' | '-') =>
 
 /**
  * The updated files of a Bash result, one after the other: an "Updated path
- * (+3 -1)" row, then the diff in two columns.
+ * (+3 -1)" row, then the diff in two columns. `columns` is the width of the
+ * surface, when known; the diff sits under the indent.
  */
-export function drawUpdatedFiles(kit: Kit, split: BashSplit, cwd: string | undefined) {
+export function drawUpdatedFiles(kit: Kit, split: BashSplit, cwd: string | undefined, columns?: number) {
   const { Box, Text } = kit
   let rowsLeft = MAX_ROWS
   let charsLeft = Math.max(0, TEXT_BUDGET - MARGIN)
@@ -121,7 +122,7 @@ export function drawUpdatedFiles(kit: Kit, split: BashSplit, cwd: string | undef
             Text({ dimColor: true, children: [` (+${count(file.hunks, '+')} -${count(file.hunks, '-')})`] }),
           ],
         }),
-        Box({ marginLeft: INDENT, flexDirection: 'column', children: [drawFit(kit, fit, file.path)] }),
+        Box({ marginLeft: INDENT, flexDirection: 'column', children: [drawFit(kit, fit, file.path, columns === undefined ? undefined : columns - INDENT)] }),
       ],
     })
   })

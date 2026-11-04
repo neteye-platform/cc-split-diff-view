@@ -37,7 +37,7 @@ export function register(on: On) {
       if (split === null) return next(e)
 
       const kit: Kit = $.ui.resolve(e)
-      const { files, hidden } = drawUpdatedFiles(kit, split, cwd())
+      const { files, hidden } = drawUpdatedFiles(kit, split, cwd(), e.viewport?.columns)
       const base = isSilent(split.rest) ? null : await next({ ...e, props: { ...e.props, output: split.rest } })
       return kit.Box({ flexDirection: 'column', children: [base, ...files, hidden] })
     }
@@ -56,6 +56,7 @@ export function register(on: On) {
     // The same limits as the pane: rows, and the characters the engine draws of a tree.
     const { count } = rowsWithin(diff, MAX_ROWS, TEXT_BUDGET)
 
-    return drawDiff(kit, diff, { path, maxRows: count, layout: 'tool-result' })
+    const columns = e.viewport?.columns
+    return drawDiff(kit, diff, { path, maxRows: count, layout: 'tool-result', ...(columns === undefined ? {} : { columns }) })
   })
 }

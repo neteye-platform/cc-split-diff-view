@@ -12,7 +12,9 @@ a formatter, `>>`) get the same drawing:
 
 - removed lines on the **left**, added lines on the **right**
 - each side keeps its real line numbers
-- a changed line sits next to the line that replaced it
+- a changed line sits next to the line that replaced it, with the words that
+  changed tinted; a pair too long for one row wraps instead (see
+  [Limitations](#limitations))
 - long runs between hunks collapse to `⋯ N unchanged lines`
 - colors are Claude Code's own diff colors (`diffRemoved` / `diffAdded` theme
   keys), so they follow your `/theme`
@@ -111,6 +113,11 @@ The mod hot-reloads when you save a file in that directory.
   (Claude Code's diff of the working tree before and after the command). It can
   change in any release. When Claude Code could not tell what changed, the
   default drawing stays.
+- A changed line next to its replacement keeps the word tint only when both
+  lines fit on one row of their column. A longer pair wraps over several rows,
+  in the plain red and green of a removed and an added line. The mod estimates
+  the width from the size Claude Code reports for the screen (or the pane); when
+  that size is unknown, only lines up to 40 characters keep the tint.
 - Each line is highlighted on its own, so something that spans lines (a block
   comment or a template string) can be colored as plain code when only part of
   it is in the diff.
