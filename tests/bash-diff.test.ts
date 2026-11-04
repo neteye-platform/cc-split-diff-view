@@ -95,3 +95,32 @@ test('a Bash result with only a created file is left to the built-in', async ($,
   expect(await ui.find({ type: 'Text', text: /^│+$/ })).toBeUndefined()
   await ui.unmount()
 })
+
+/** An update of 25 changed lines of 500 characters: about 51000 characters of diff, under the 75000 of budget. */
+const bigUpdate = () => ({
+  files: [
+    {
+      filePath: '/w/a.txt',
+      hunks: Array.from({ length: 25 }, (_, i) => ({
+        oldStart: i * 10 + 1,
+        oldLines: 1,
+        newStart: i * 10 + 1,
+        newLines: 1,
+        lines: ['-' + 'a'.repeat(500), '+' + 'b'.repeat(500)],
+      })),
+    },
+  ],
+  moreFiles: 0,
+})
+
+test('a short command output leaves the whole diff its text budget', async ($, on) => {
+  const ui = await mount($, on, result(bigUpdate(), { stdout: 'done' }))
+  expect(await ui.find({ type: 'Text', text: /more rows/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a long command output comes off the text budget of the diffs', async ($, on) => {
+  const ui = await mount($, on, result(bigUpdate(), { stdout: 'x'.repeat(40_000) }))
+  expect(await ui.find({ type: 'Text', text: /more rows/ })).toBeDefined()
+  await ui.unmount()
+})

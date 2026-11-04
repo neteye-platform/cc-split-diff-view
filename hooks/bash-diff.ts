@@ -104,7 +104,12 @@ const count = (hunks: readonly Hunk[], mark: '+' | '-') =>
 export function drawUpdatedFiles(kit: Kit, split: BashSplit, cwd: string | undefined, columns?: number) {
   const { Box, Text } = kit
   let rowsLeft = MAX_ROWS
-  let charsLeft = Math.max(0, TEXT_BUDGET - MARGIN)
+  // The command's own output is part of the tree the engine draws, so it comes off the budget too.
+  const output = [split.rest.stdout, split.rest.stderr].reduce<number>(
+    (total, text) => total + (typeof text === 'string' ? text.length : 0),
+    0,
+  )
+  let charsLeft = Math.max(0, TEXT_BUDGET - MARGIN - output)
 
   const files = split.updated.map(file => {
     const fit = fitHunks(file.hunks, rowsLeft, charsLeft)

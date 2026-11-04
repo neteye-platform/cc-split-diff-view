@@ -92,16 +92,21 @@ test('wide characters take two columns', async $ => {
   await ui.unmount()
 })
 
-test('an unknown width trusts short lines only', async $ => {
-  const short = await mountEdit($, text(40, 'a'), text(40, 'b'))
-  expect((await codes(short)).every(code => isPair(code.source))).toBe(true)
-  await short.unmount()
+test('an unknown width wraps every changed pair, even a short one', async $ => {
+  for (const length of [1, 40, 41]) {
+    const ui = await mountEdit($, text(length, 'a'), text(length, 'b'))
+    const found = await codes(ui)
+    expect(found.some(code => isPair(code.source))).toBe(false)
+    expect(found.map(code => code.wrap)).toEqual(['wrap', 'wrap'])
+    await ui.unmount()
+  }
+})
 
-  const long = await mountEdit($, text(41, 'a'), text(41, 'b'))
-  const found = await codes(long)
-  expect(found.some(code => isPair(code.source))).toBe(false)
-  expect(found.map(code => code.wrap)).toEqual(['wrap', 'wrap'])
-  await long.unmount()
+test('enclosed ideographs take two columns', async $ => {
+  // 15 of U+1F250 are 30 columns: more than a column of a 60-column screen holds after the gutter.
+  const ui = await mountEdit($, text(15, '\u{1F250}'), text(15, '\u{1F251}'), NARROW)
+  expect((await codes(ui)).some(code => isPair(code.source))).toBe(false)
+  await ui.unmount()
 })
 
 test('no code element truncates when the lines are long', async $ => {

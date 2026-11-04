@@ -117,7 +117,7 @@ The mod hot-reloads when you save a file in that directory.
   lines fit on one row of their column. A longer pair wraps over several rows,
   in the plain red and green of a removed and an added line. The mod estimates
   the width from the size Claude Code reports for the screen (or the pane); when
-  that size is unknown, only lines up to 40 characters keep the tint.
+  that size is unknown, every changed pair wraps.
 - Each line is highlighted on its own, so something that spans lines (a block
   comment or a template string) can be colored as plain code when only part of
   it is in the diff.

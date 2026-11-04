@@ -34,9 +34,10 @@ const SEPARATOR_WIDTH = 1
 
 /**
  * Characters of text that count as fitting a column when the width is not
- * known: a line this short fits any terminal a person works in.
+ * known: none. The tinted pair is clipped to one row and cuts what does not
+ * fit with an ellipsis, so without a width every changed pair wraps.
  */
-const UNKNOWN_ROOM = 40
+const UNKNOWN_ROOM = 0
 
 /**
  * Columns the engine's diff spends before a line's text: the line number,
@@ -54,8 +55,7 @@ const gutterWidth = (numberWidth: number) => numberWidth + 3
  * The two columns are 50% each of the row next to a one-column separator, so
  * the room of each is half of what the separator leaves, rounded down; the
  * engine's own rounding of the shrink can differ by a column, which the
- * gutter's margin covers. Without a width a short line is the only one that
- * is trusted to fit.
+ * gutter's margin covers. Without a width no line is trusted to fit.
  */
 export function textRoom(width: number | undefined, numberWidth: number): number {
   if (width === undefined) return UNKNOWN_ROOM
@@ -81,7 +81,8 @@ export function displayWidth(text: string): number {
       (code >= 0xfe30 && code <= 0xfe6f) ||
       (code >= 0xff00 && code <= 0xff60) ||
       (code >= 0xffe0 && code <= 0xffe6) ||
-      code >= 0x1f300
+      // Enclosed ideographs (1F200) and everything above: emoji, symbols, the CJK planes.
+      code >= 0x1f200
     width += isWide ? 2 : 1
   }
   return width
@@ -129,7 +130,7 @@ export type DiffOptions = {
   /**
    * Columns across the surface the diff is drawn into, the layout's indent
    * included; it tells which changed lines fit one row of a column. Absent,
-   * only short lines are trusted to.
+   * every changed pair wraps.
    */
   columns?: number
 }
