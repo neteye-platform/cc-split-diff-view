@@ -1,5 +1,6 @@
 import type { On } from 'claude-code'
 
+import { drawUpdatedFiles, isSilent, takeUpdatedFiles } from './bash-diff.js'
 import { registerDiffSplit } from './diff-command.js'
 import { TEXT_BUDGET, drawDiff, rowsWithin } from './draw.js'
 import type { Kit } from './draw.js'
@@ -10,6 +11,9 @@ const TOOLS = ['Edit', 'Write']
 
 /** Rows drawn before "… N more rows". */
 const MAX_ROWS = 200
+
+/** The session's working directory, to show paths from it; undefined where the runtime has no `process`. */
+const cwd = () => (globalThis as { process?: { cwd?: () => string } }).process?.cwd?.()
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
@@ -25,7 +29,20 @@ export function register(on: On) {
 
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     const { tool, output, isErrored } = e.props
-    if (!TOOLS.includes(tool) || isErrored || !isRecord(output)) return next(e)
+    if (isErrored) return next(e)
+
+    if (tool === 'Bash') {
+      // Files the command updated: the built-in draws its output, the diffs come under it.
+      const split = takeUpdatedFiles(output)
+      if (split === null) return next(e)
+
+      const kit: Kit = $.ui.resolve(e)
+      const { files, hidden } = drawUpdatedFiles(kit, split, cwd())
+      const base = isSilent(split.rest) ? null : await next({ ...e, props: { ...e.props, output: split.rest } })
+      return kit.Box({ flexDirection: 'column', children: [base, ...files, hidden] })
+    }
+
+    if (!TOOLS.includes(tool) || !isRecord(output)) return next(e)
     // An edit held for review wrote nothing, so there is no diff to show.
     if (output.staged === true) return next(e)
 
