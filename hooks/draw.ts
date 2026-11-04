@@ -11,10 +11,10 @@ export type Kit = Pick<ElementTable<'terminal'>, 'Box' | 'Text' | 'Code'>
  * surrounds them differs.
  */
 const LAYOUTS = {
-  /** Under a tool call in the transcript: the summary line with the built-in's response marker, and a frame. */
-  'tool-result': { lead: '  ⎿  ', indent: 5, isFramed: true },
-  /** In the pane: no summary (the file's row has the counts), no frame, the rule between the columns alone. */
-  pane: { lead: null, indent: 0, isFramed: false },
+  /** Under a tool call in the transcript: the summary line with the built-in's response marker; the rows sit under it, indented. */
+  'tool-result': { lead: '  ⎿  ', indent: 5 },
+  /** In the pane: no summary (the file's row has the counts), the rule between the columns alone. */
+  pane: { lead: null, indent: 0 },
 } as const
 
 export type DiffLayout = keyof typeof LAYOUTS
@@ -28,6 +28,65 @@ export const TEXT_BUDGET = 80_000
 
 /** Lines of the rule between the columns; a row that wraps past it shows a gap in the rule. */
 const RULE_LENGTH = 16
+
+/** Columns the separator between the two columns takes. */
+const SEPARATOR_WIDTH = 1
+
+/**
+ * Characters of text that count as fitting a column when the width is not
+ * known: none. The tinted pair is clipped to one row and cuts what does not
+ * fit with an ellipsis, so without a width every changed pair wraps.
+ */
+const UNKNOWN_ROOM = 0
+
+/**
+ * Columns the engine's diff spends before a line's text: the line number,
+ * padded to the widest number of the diff, a space and the marker (`12 -text`,
+ * as the built-in's own rows show), plus one column as a margin. The margin
+ * makes this over-count by one, which only sends a line to the wrapping
+ * drawing a column early.
+ */
+const gutterWidth = (numberWidth: number) => numberWidth + 3
+
+/**
+ * Characters of text that fit one row of a column, or a lower bound of it.
+ *
+ * `width` is the columns the rows have, the layout's indent already taken off.
+ * The two columns are 50% each of the row next to a one-column separator, so
+ * the room of each is half of what the separator leaves, rounded down; the
+ * engine's own rounding of the shrink can differ by a column, which the
+ * gutter's margin covers. Without a width no line is trusted to fit.
+ */
+export function textRoom(width: number | undefined, numberWidth: number): number {
+  if (width === undefined) return UNKNOWN_ROOM
+  const column = Math.floor((width - SEPARATOR_WIDTH) / 2)
+  return Math.max(0, column - gutterWidth(numberWidth))
+}
+
+/**
+ * Columns a line takes on the screen. East Asian wide characters and emoji
+ * take two; anything else counts one, which is right for the text a diff
+ * holds. Combining marks count one too, a harmless over-count. Tabs were laid
+ * out as spaces before the line got here.
+ */
+export function displayWidth(text: string): number {
+  let width = 0
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0
+    const isWide =
+      (code >= 0x1100 && code <= 0x115f) ||
+      (code >= 0x2e80 && code <= 0xa4cf) ||
+      (code >= 0xac00 && code <= 0xd7a3) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xfe30 && code <= 0xfe6f) ||
+      (code >= 0xff00 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6) ||
+      // Enclosed ideographs (1F200) and everything above: emoji, symbols, the CJK planes.
+      code >= 0x1f200
+    width += isWide ? 2 : 1
+  }
+  return width
+}
 
 /** Characters of a one-line hunk header (`@@ -12,1 +12,1 @@` and the mark). */
 const HEADER_LENGTH = 22
@@ -68,6 +127,12 @@ export type DiffOptions = {
   /** Rows drawn before "… N more rows". */
   maxRows: number
   layout: DiffLayout
+  /**
+   * Columns across the surface the diff is drawn into, the layout's indent
+   * included; it tells which changed lines fit one row of a column. Absent,
+   * every changed pair wraps.
+   */
+  columns?: number
 }
 
 /**
@@ -75,9 +140,11 @@ export type DiffOptions = {
  * right, with line numbers, under a "Added 3 lines, removed 1 line" summary
  * where the layout has one. Every place that draws a diff goes through here.
  */
-export function drawDiff(kit: Kit, diff: SplitDiff, { path, maxRows, layout }: DiffOptions) {
+export function drawDiff(kit: Kit, diff: SplitDiff, { path, maxRows, layout, columns }: DiffOptions) {
   const { Box, Text } = kit
-  const { lead, indent, isFramed } = LAYOUTS[layout]
+  const { lead, indent } = LAYOUTS[layout]
+  // The rows start after the indent, and there is no frame to take columns of its own.
+  const width = columns === undefined ? undefined : columns - indent
 
   return Box({
     flexDirection: 'column',
@@ -91,8 +158,7 @@ export function drawDiff(kit: Kit, diff: SplitDiff, { path, maxRows, layout }: D
       Box({
         flexDirection: 'column',
         marginLeft: indent,
-        ...(isFramed ? { borderStyle: 'round', borderDimColor: true } : {}),
-        children: drawRows(kit, diff, path, maxRows),
+        children: drawRows(kit, diff, path, maxRows, width),
       }),
     ],
   })
@@ -130,10 +196,13 @@ export function fitHunks(hunks: readonly Hunk[], maxRows: number, maxChars: numb
 
 /**
  * Draws a fit: the split diff in the pane's layout, or git's own diff, in the
- * engine's drawing, with "… N more rows" after what was cut.
+ * engine's drawing, with "… N more rows" after what was cut. `columns` is the
+ * width the fit has, when the caller knows it (see `DiffOptions`).
  */
-export function drawFit(kit: Kit, fit: Fit, path: string | undefined) {
-  if (fit.kind === 'split') return drawDiff(kit, fit.diff, { path, maxRows: fit.count, layout: 'pane' })
+export function drawFit(kit: Kit, fit: Fit, path: string | undefined, columns?: number) {
+  if (fit.kind === 'split') {
+    return drawDiff(kit, fit.diff, { path, maxRows: fit.count, layout: 'pane', ...(columns === undefined ? {} : { columns }) })
+  }
 
   const { Box, Text, Code } = kit
   const hidden = fit.total - fit.count
@@ -150,18 +219,20 @@ export function drawFit(kit: Kit, fit: Fit, path: string | undefined) {
 
 /**
  * The rows of a split diff, ready to sit in a column, with "… N more rows"
- * after the first `maxRows`.
+ * after the first `maxRows`. `width` is the columns the rows have, if known.
  */
-function drawRows(kit: Kit, diff: SplitDiff, path: string | undefined, maxRows: number) {
+function drawRows(kit: Kit, diff: SplitDiff, path: string | undefined, maxRows: number, width: number | undefined) {
   const shown = diff.rows.slice(0, maxRows)
   const hidden = diff.rows.length - shown.length
+  const room = textRoom(width, diff.numberWidth)
   return [
-    ...shown.map(row => drawRow(kit, row, path)),
+    ...shown.map(row => drawRow(kit, row, path, room)),
     hidden > 0 ? kit.Text({ dimColor: true, children: ['… ' + hidden + ' more rows'] }) : null,
   ]
 }
 
-function drawRow(kit: Kit, row: SplitRow, path: string | undefined) {
+/** `room` is the characters of text that fit one row of a column (see `textRoom`). */
+function drawRow(kit: Kit, row: SplitRow, path: string | undefined, room: number) {
   const { Box, Text } = kit
   if (row.kind === 'gap') {
     // The label sits in both columns, so a wide screen doesn't leave the right one blank.
@@ -173,7 +244,17 @@ function drawRow(kit: Kit, row: SplitRow, path: string | undefined) {
       children: [Box({ ...column, children: [label()] }), Box({ width: 1, flexShrink: 0 }), Box({ ...column, children: [label()] })],
     })
   }
-  if (row.changed && row.left !== null && row.right !== null) {
+  // The tinted pair is clipped to one row, so only a pair that fits it, and whose numbers have as many digits, can use it; any other wraps in cells.
+  // The pair is one hunk, whose gutter is as wide as its largest number: when the two numbers differ in digits
+  // (9 and 10), the text of the left column would sit a column to the right of the other rows.
+  if (
+    row.changed &&
+    row.left !== null &&
+    row.right !== null &&
+    String(row.left.no).length === String(row.right.no).length &&
+    fits(row.left, room) &&
+    fits(row.right, room)
+  ) {
     return drawPair(kit, row.left, row.right, path)
   }
   return Box({
@@ -218,11 +299,16 @@ function drawCell(
   })
 }
 
+/** True when the line fits one row of a column, with `room` characters for its text. */
+const fits = (cell: Cell, room: number) => displayWidth(cell.text) <= room
+
 /**
  * A removed line next to the line that replaced it. The engine draws the two as
  * one hunk, which is what makes it tint the words that changed; each column
- * then shows its own line of that hunk. Long lines are cut with an ellipsis, as
- * a column clipped to one row cannot wrap.
+ * then shows its own line of that hunk. A column clipped to one row cannot wrap
+ * and would cut a long line with an ellipsis, so `drawRow` calls this only for
+ * a pair that fits one row; a longer pair is drawn in wrapping cells, without
+ * the word tint.
  */
 function drawPair(kit: Kit, left: Cell, right: Cell, path: string | undefined) {
   const { Box, Code } = kit

@@ -5,13 +5,16 @@
 
 A [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) that
 draws the diff of every `Edit` and `Write` in **two side-by-side columns**
-instead of one stacked `-`/`+` list:
+instead of one stacked `-`/`+` list. The files a `Bash` command updates (`sed -i`,
+a formatter, `>>`) get the same drawing:
 
 ![Split diff of an Edit: removed lines on the left, added lines on the right, each with its own line numbers](docs/split-diff-view.png)
 
 - removed lines on the **left**, added lines on the **right**
 - each side keeps its real line numbers
-- a changed line sits next to the line that replaced it
+- a changed line sits next to the line that replaced it, with the words that
+  changed tinted; a pair too long for one row wraps instead (see
+  [Limitations](#limitations))
 - long runs between hunks collapse to `⋯ N unchanged lines`
 - colors are Claude Code's own diff colors (`diffRemoved` / `diffAdded` theme
   keys), so they follow your `/theme`
@@ -19,7 +22,10 @@ instead of one stacked `-`/`+` list:
   element), with the language taken from the file's extension
 
 Errors, edits held for review, brand-new files and anything without a diff
-keep Claude Code's normal drawing.
+keep Claude Code's normal drawing. For `Bash`, the command's output keeps the
+normal drawing too, and each updated file adds an `Updated path (+n -n)` row
+with its split diff under it; created and deleted files stay as Claude Code
+draws them.
 
 ## `/diffsplit`
 
@@ -101,8 +107,17 @@ The mod hot-reloads when you save a file in that directory.
 
 ## Limitations
 
-- Only `Edit` and `Write` are redrawn. The permission prompt is not a render
-  site, so a mod cannot change it.
+- Only `Edit`, `Write` and the file updates of `Bash` are redrawn. The
+  permission prompt is not a render site, so a mod cannot change it.
+- The `Bash` diff reads `bashEditDiff`, an internal field of the Bash result
+  (Claude Code's diff of the working tree before and after the command). It can
+  change in any release. When Claude Code could not tell what changed, the
+  default drawing stays.
+- A changed line next to its replacement keeps the word tint only when both
+  lines fit on one row of their column. A longer pair wraps over several rows,
+  in the plain red and green of a removed and an added line. The mod estimates
+  the width from the size Claude Code reports for the screen (or the pane); when
+  that size is unknown, every changed pair wraps.
 - Each line is highlighted on its own, so something that spans lines (a block
   comment or a template string) can be colored as plain code when only part of
   it is in the diff.

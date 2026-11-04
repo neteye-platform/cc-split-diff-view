@@ -276,7 +276,7 @@ function drawFile($: Engine, kit: Kit, file: FileDiff, isFolded: boolean, fit: F
       rule(),
       fileRow(kit, file, { key: 'file:' + file.path, label: (isFolded ? '▸ ' : '▾ ') + file.path, onPress: toggle }),
       rule(),
-      isFolded ? null : body(kit, file, fit),
+      isFolded ? null : body(kit, file, fit, columns),
     ],
   })
 }
@@ -303,7 +303,7 @@ function counts(Text: Kit['Text'], file: FileDiff) {
   ]
 }
 
-function body(kit: Kit, file: FileDiff, fit: Fit | null) {
+function body(kit: Kit, file: FileDiff, fit: Fit | null, columns: number) {
   const { Text } = kit
   if (file.isBinary) return Text({ dimColor: true, children: ['Binary file.'] })
   if (fit === null) {
@@ -311,5 +311,5 @@ function body(kit: Kit, file: FileDiff, fit: Fit | null) {
     return Text({ dimColor: true, children: [empty] })
   }
 
-  return drawFit(kit, fit, file.path)
+  return drawFit(kit, fit, file.path, columns)
 }
