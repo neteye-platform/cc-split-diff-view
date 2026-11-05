@@ -1,6 +1,6 @@
 {
   "name": "cc-split-diff-view",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Draws Edit, Write and Bash file-update diffs in two side-by-side columns: removed lines on the left, added lines on the right, in Claude Code's own diff colors. Adds /diffsplit, a pane that reviews all the uncommitted changes the same way",
   "types": "./types/index.d.ts",
   "author": { "name": "oskarnrk", "url": "https://github.com/oskarnrk" },
