@@ -57,17 +57,20 @@ folding other files makes room for it.
 
 ## Install
 
+The plugin is listed in the `neteye-platform` marketplace, which lives in
+[`neteye-platform/ai-agents-tools`](https://github.com/neteye-platform/ai-agents-tools).
+
 From a terminal:
 
 ```bash
-claude plugin marketplace add neteye-platform/cc-split-diff-view
+claude plugin marketplace add neteye-platform/ai-agents-tools
 claude plugin install cc-split-diff-view@neteye-platform
 ```
 
 Or from inside a Claude Code session:
 
 ```text
-/plugin marketplace add neteye-platform/cc-split-diff-view
+/plugin marketplace add neteye-platform/ai-agents-tools
 /plugin install cc-split-diff-view@neteye-platform
 ```
 
